@@ -13,7 +13,7 @@ from agents.main_graph import AgenticRAG
 agent = AgenticRAG(llm, tools).graph
 query = "Whats the difference between titan architecture and transformers?"
 query2 = "Give me 5 reasons to visit Canada"
-response = agent.invoke({"messages": [query]})
+response = agent.invoke({"messages": [query2]})
 print(response["messages"])
 
 

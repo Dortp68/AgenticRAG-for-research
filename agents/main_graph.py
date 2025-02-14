@@ -1,5 +1,5 @@
 from langchain.tools.retriever import create_retriever_tool
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field
 
 from langgraph.graph import MessagesState
@@ -10,7 +10,7 @@ from langgraph.types import Command
 
 from typing import Literal
 
-from utils.prompts import DOC_GRADER_PROMPT
+from utils.prompts import DOC_GRADER_PROMPT, RAG_PROMPT
 from utils.utils import web_search_text
 from retriever import DocumentProcessor
 
@@ -19,6 +19,10 @@ class DocGradeScore(BaseModel):
     """Binary score that expresses the relevance of the document to the user's question"""
 
     binary_score: str = Field(None, description="Relevance score 'yes' or 'no'")
+
+class GraphState(MessagesState):
+    context: str
+    query: str
 
 class AgenticRAG:
     def __init__(self, llm, tools, memory=None, system=""):
@@ -29,9 +33,10 @@ class AgenticRAG:
         builder = StateGraph(MessagesState)
         builder.add_node("agent", self.agent)
         builder.add_node("tools", ToolNode(tools))
+        builder.add_node("generate", self.generate_answer)
         # builder.add_node("retrieve", self.retrieve)
         # builder.add_node("websearch", self.websearch)
-        # builder.add_node("grader", self.grade_documents)
+        builder.add_node("grader", self.grade_documents)
 
         builder.add_edge(START, "agent")
         builder.add_conditional_edges(
@@ -40,6 +45,7 @@ class AgenticRAG:
             tools_condition,
             ["tools", END],
         )
+        builder.add_conditional_edges("tools", self.edge_condition)
         # builder.add_edge("retrieve", "grader")
         # builder.add_edge("grader", END)
         self.graph = builder.compile()
@@ -64,7 +70,7 @@ class AgenticRAG:
 
         return {"messages": [response]}
 
-    def grade_documents(self, state: MessagesState) -> Command[Literal["generate", "websearch"]]:
+    def grade_documents(self, state: MessagesState) -> Command[Literal["generate", "tools"]]:
         """
             Determines whether the retrieved documents are relevant to the question.
 
@@ -92,11 +98,29 @@ class AgenticRAG:
         else:
             print("---DECISION: DOCS NOT RELEVANT---")
             print(score)
-            return Command(goto="websearch", update={"messages": question})
+            return Command(goto="tools", update={"messages": question})
 
+    def edge_condition(self, state: MessagesState):
+        last_message = state["messages"][-1]
+        if isinstance(last_message, ToolMessage):
+            last_tool = last_message.name
+        else:
+            raise RuntimeError("edge_conditions: tool call error")
+        if last_tool == "retrieve_research_papers":
+            return "grader"
+        elif last_tool == "web_search_tool":
+            return "generate"
+        else:
+            raise RuntimeError("edge_conditions")
 
-    def web_search(self, state: MessagesState):
+    def generate_answer(self, state: MessagesState):
+        print("---GENERATE---")
         question = state["messages"][0].content
+        context = state["messages"][-1].content
+        print(context)
+        prompt = RAG_PROMPT.format(context=context, question=question)
+        response = self.llm.invoke(prompt)
+        return{"messages": [response]}
 
 
 

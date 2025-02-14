@@ -59,6 +59,8 @@ class DocumentProcessor:
         return web_content
 
 
+
+
 class IndexBuilder:
 
     def __init__(self):
@@ -112,6 +114,7 @@ def get_retriever_tool():
     return  retriever_tool
 
 from utils.utils import web_search_text
+
 @tool
 def web_search_tool(query: str) -> str:
     """Performs a web search and returns the top 5 result snippet."""
@@ -119,6 +122,8 @@ def web_search_tool(query: str) -> str:
     docs = DocumentProcessor.load_web(urls)
     result = "\n".join(docs)
     return result
+
+
 
 
 
