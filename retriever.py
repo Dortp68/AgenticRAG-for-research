@@ -1,10 +1,16 @@
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
+from langchain_unstructured import UnstructuredLoader
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.tools.retriever import create_retriever_tool
+from langchain.tools import tool
+
+import asyncio
 import os
 
 from utils import config
+from utils.prompts import RETRIEVER_TOOL_PROMPT
 
 class DocumentProcessor:
     """
@@ -20,7 +26,7 @@ class DocumentProcessor:
         """ """
         print("---LOADING DOCUMENTS---")
         try:
-            docs = [PyPDFLoader(os.path.join(config.documents_path, doc)).load() for doc in os.listdir(config.documents_path)]
+            docs = [PyPDFLoader(os.path.join(config.documents_path, doc)).load() for doc in os.listdir(os.path.join(os.getcwd(), config.documents_path))]
         except Exception as e:
             raise RuntimeError(f"Error processing document: {e}")
 
@@ -31,8 +37,26 @@ class DocumentProcessor:
         return doc_splits
 
     @staticmethod
-    def load_web():
-        pass
+    def load_web(urls: list[str]) -> list[str]:
+
+        async def load_(url: str) -> list[str]:
+
+            loader = UnstructuredLoader(web_url=url)
+
+            setup_docs = []
+            async for doc in loader.alazy_load():
+                if doc.metadata["category"] == "NarrativeText" or doc.metadata["category"] == "ListItem":
+                    setup_docs.append(doc.page_content)
+
+            return setup_docs
+
+        print("---LOADING WEB PAGES---")
+        web_content = []
+        for url in urls:
+            page_setup_docs = asyncio.run(load_(url))
+            web_content.extend(page_setup_docs)
+
+        return web_content
 
 
 class IndexBuilder:
@@ -70,7 +94,7 @@ class IndexBuilder:
 
         return retriever
 
-if __name__ == "__main__":
+def get_retriever_tool():
     builder = IndexBuilder()
     builder.build_vectorstore()
 
@@ -79,7 +103,24 @@ if __name__ == "__main__":
         builder.pull_documents(docs_list)
 
     retriever = builder.build_retriever()
-    print(builder.vectorstore.get())
+    retriever_tool = create_retriever_tool(
+        retriever,
+        "retrieve_research_papers",
+        RETRIEVER_TOOL_PROMPT,
+        response_format = "content_and_artifact"
+    )
+    return  retriever_tool
+
+from utils.utils import web_search_text
+@tool
+def web_search_tool(query: str) -> str:
+    """Performs a web search and returns the top 5 result snippet."""
+    urls = web_search_text(query)
+    docs = DocumentProcessor.load_web(urls)
+    result = "\n".join(docs)
+    return result
+
+
 
 
 

@@ -1,8 +1,8 @@
 from duckduckgo_search import DDGS
-from typing import Optional, List
+from typing import Optional
 
 
-def web_search_text(query: str, max_results: Optional[int] = 5) -> List:
+def web_search_text(query: str, max_results: Optional[int] = 5) -> list[str]:
     """
     Search for text on duckduckgo.com.
 
@@ -13,8 +13,11 @@ def web_search_text(query: str, max_results: Optional[int] = 5) -> List:
     Returns:
         List of search results as strings.
     """
-
+    print("---USING WEB SEARCH---")
     with DDGS() as ddgs:
         results = results = [r['href'] for r in ddgs.text(query, max_results=max_results)]
     return results
+
+
+
 
