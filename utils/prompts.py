@@ -22,6 +22,6 @@ Now, review the user question:
 
 Provide an answer to this questions using only the above context. 
 
-Use three sentences maximum and keep the answer concise.
+Adjust your response length based on the question, but use five sentences maximum and keep the answer concise.
 
 Answer:"""

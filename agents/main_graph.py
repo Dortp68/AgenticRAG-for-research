@@ -1,5 +1,5 @@
 from langchain.tools.retriever import create_retriever_tool
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage, AIMessage
 from pydantic import BaseModel, Field
 
 from langgraph.graph import MessagesState
@@ -13,7 +13,6 @@ from typing import Literal
 from utils.prompts import DOC_GRADER_PROMPT, RAG_PROMPT
 from utils.utils import web_search_text
 from retriever import DocumentProcessor
-
 
 class DocGradeScore(BaseModel):
     """Binary score that expresses the relevance of the document to the user's question"""
@@ -34,8 +33,6 @@ class AgenticRAG:
         builder.add_node("agent", self.agent)
         builder.add_node("tools", ToolNode(tools))
         builder.add_node("generate", self.generate_answer)
-        # builder.add_node("retrieve", self.retrieve)
-        # builder.add_node("websearch", self.websearch)
         builder.add_node("grader", self.grade_documents)
 
         builder.add_edge(START, "agent")
@@ -46,8 +43,7 @@ class AgenticRAG:
             ["tools", END],
         )
         builder.add_conditional_edges("tools", self.edge_condition)
-        # builder.add_edge("retrieve", "grader")
-        # builder.add_edge("grader", END)
+        builder.add_edge("generate", END)
         self.graph = builder.compile()
 
     def agent(self, state: MessagesState):
@@ -88,6 +84,7 @@ class AgenticRAG:
         question = state["messages"][0].content
         docs = state["messages"][-1].content
 
+
         prompt = DOC_GRADER_PROMPT.format(context=docs, question=question)
         score = llm_with_tool.invoke(prompt).binary_score
 
@@ -98,9 +95,14 @@ class AgenticRAG:
         else:
             print("---DECISION: DOCS NOT RELEVANT---")
             print(score)
-            return Command(goto="tools", update={"messages": question})
+            msg = AIMessage(content="", tool_calls=[
+                            {'name': 'web_search_tool', 'args': {'query': question},
+                            'id': '41d01da6-534d-4aae-824c-b4014ec87e10', 'type': 'tool_call'}])
+
+            return Command(goto="tools", update={"messages": msg})
 
     def edge_condition(self, state: MessagesState):
+
         last_message = state["messages"][-1]
         if isinstance(last_message, ToolMessage):
             last_tool = last_message.name
@@ -117,8 +119,8 @@ class AgenticRAG:
         print("---GENERATE---")
         question = state["messages"][0].content
         context = state["messages"][-1].content
-        print(context)
         prompt = RAG_PROMPT.format(context=context, question=question)
+        print(prompt)
         response = self.llm.invoke(prompt)
         return{"messages": [response]}
 

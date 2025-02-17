@@ -2,6 +2,9 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_unstructured import UnstructuredLoader
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.tools.retriever import create_retriever_tool
 from langchain.tools import tool
@@ -11,6 +14,8 @@ import os
 
 from utils import config
 from utils.prompts import RETRIEVER_TOOL_PROMPT
+
+
 
 class DocumentProcessor:
     """
@@ -86,11 +91,11 @@ class IndexBuilder:
         except Exception as e:
             raise RuntimeError(f"Error pulling documents: {e}")
 
-    def build_retriever(self):
+    def build_retriever(self, k: int):
 
         try:
             print("---BUILDING RETRIEVER---")
-            retriever = self.vectorstore.as_retriever(k=config.top_k)
+            retriever = self.vectorstore.as_retriever(k=k)
         except Exception as e:
             raise RuntimeError(f"Error pulling documents: {e}")
 
@@ -104,7 +109,16 @@ def get_retriever_tool():
         docs_list = DocumentProcessor.load_documents()
         builder.pull_documents(docs_list)
 
-    retriever = builder.build_retriever()
+    if config.reranking:
+        base_retriever = builder.build_retriever(k=10)
+        model = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        compressor = CrossEncoderReranker(model=model, top_n=3)
+        retriever = ContextualCompressionRetriever(
+            base_compressor=compressor, base_retriever=base_retriever
+        )
+    else:
+        retriever = builder.build_retriever(config.top_k)
+
     retriever_tool = create_retriever_tool(
         retriever,
         "retrieve_research_papers",
@@ -123,7 +137,10 @@ def web_search_tool(query: str) -> str:
     result = "\n".join(docs)
     return result
 
-
+@tool
+def general_query_tool(query: str) -> str:
+    """Response on general type user`s query"""
+    return query
 
 
 

@@ -2,7 +2,7 @@ from duckduckgo_search import DDGS
 from typing import Optional
 
 
-def web_search_text(query: str, max_results: Optional[int] = 5) -> list[str]:
+def web_search_text(query: str, max_results: Optional[int] = 3) -> list[str]:
     """
     Search for text on duckduckgo.com.
 
