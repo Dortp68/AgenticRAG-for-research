@@ -21,12 +21,8 @@ from utils.prompts import (PLAN_PROMPT,
 
 class DocGradeScore(BaseModel):
     """Binary score that expresses the relevance of the document to the user's question"""
-
     binary_score: str = Field(None, description="Relevance score 'yes' or 'no'")
 
-class GraphState(MessagesState):
-    context: str
-    query: str
 
 class AgenticRAG:
     def __init__(self, llm, tools, memory=None, system=""):
@@ -62,7 +58,7 @@ class AgenticRAG:
         Returns:
             dict: The updated state with the agent response appended to messages
         """
-        print("---CALL AGENT---")
+        print("---CALL RAG AGENT---")
         messages = state["messages"]
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
@@ -197,3 +193,24 @@ class EssayWriter:
             "draft": response.content,
             "revision_number": state.get("revision_number", 1) + 1
         }
+
+
+class ChatAgent:
+    def __init__(self, llm, system=""):
+        self.llm = llm
+        self.system = system
+
+        builder = StateGraph(MessagesState)
+
+        builder.add_edge(START, "agent")
+        builder.add_node("agent", self.call_llm)
+        builder.add_edge("agent", END)
+        self.graph = builder.compile()
+
+    def call_llm(self, state: MessagesState):
+        print("---CALL CHAT AGENT---")
+        messages = state["messages"]
+        if self.system:
+            messages = [SystemMessage(content=self.system)] + messages
+        response = self.llm.invoke(messages)
+        return {"messages": [response]}

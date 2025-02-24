@@ -1,5 +1,7 @@
 from langchain.tools.retriever import create_retriever_tool
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage, AIMessage
+from langchain_core.tools import tool, BaseTool, InjectedToolCallId
+
 from pydantic import BaseModel, Field
 
 from langgraph.graph import MessagesState
@@ -8,56 +10,63 @@ from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt import tools_condition
 from langgraph.types import Command
 
-from typing import Literal
+from typing import Literal, TypedDict
 
-from utils.prompts import DOC_GRADER_PROMPT, RAG_PROMPT
+from utils.prompts import DOC_GRADER_PROMPT, RAG_PROMPT, ROUTER_PROMPT
 from utils.utils import web_search_text
 from retriever import DocumentProcessor
 
-class DocGradeScore(BaseModel):
-    """Binary score that expresses the relevance of the document to the user's question"""
+from agents.sub_graph import ChatAgent, AgenticRAG
+from langgraph.prebuilt import create_react_agent
 
-    binary_score: str = Field(None, description="Relevance score 'yes' or 'no'")
+def create_supervisor(llm, tools):
+    chat_agent = ChatAgent(llm).graph
+    rag_agent = AgenticRAG(llm, tools).graph
 
-class GraphState(MessagesState):
-    context: str
-    query: str
+    @tool
+    def chat_agent_tool(query: str):
+        """Answer on general user query"""
+        response = chat_agent.invoke({"messages": [query]})
+        return response['messages'][-1]
 
-class AgenticRAG:
+    @tool
+    def rag_agent_tool(query: str):
+        """Performs websearch and search information in vectorstore from research papers on neural network architectures, large language models, and new developments in this area."""
+        response = rag_agent.invoke({"messages": [query]})
+        return response['messages'][-1]
+
+    agent = create_react_agent(
+        model=llm,
+        tools=[chat_agent_tool, rag_agent_tool],
+        # prompt="You are a team supervisor managing a research expert and a math expert. "
+        # "For current events, use research_agent. "
+        # "For math problems, use math_agent."
+    )
+    return agent
+
+class Supervisor:
     def __init__(self, llm, tools, memory=None, system=""):
         self.llm = llm
         self.system = system
-        self.tools = tools
+        self.chat_agent = ChatAgent(self.llm).graph
+        self.rag_agent = AgenticRAG(self.llm, tools).graph
 
-        builder = StateGraph(MessagesState)
-        builder.add_node("agent", self.agent)
-        builder.add_node("tools", ToolNode(tools))
-        builder.add_node("generate", self.generate_answer)
-        builder.add_node("grader", self.grade_documents)
+        self.tools = [self.chat_agent_tool, self.rag_agent_tool]
 
-        builder.add_edge(START, "agent")
-        builder.add_conditional_edges(
-            "agent",
-            # Assess agent decision
-            tools_condition,
-            ["tools", END],
-        )
-        builder.add_conditional_edges("tools", self.edge_condition)
-        builder.add_edge("generate", END)
-        self.graph = builder.compile()
+
+    @tool
+    def chat_agent_tool(self, query: str):
+        """Answer on general user query"""
+        response = self.chat_agent.invoke({"messages": [query]})
+        return response['messages'][-1]
+
+    @tool
+    def rag_agent_tool(self, query: str):
+        """Performs websearch and search information in vectorstore from research papers on neural network architectures, large language models, and new developments in this area."""
+        response = self.rag_agent.invoke({"messages": [query]})
+        return response['messages'][-1]
 
     def agent(self, state: MessagesState):
-        """
-        Invokes the agent model to generate a response based on the current state. Given
-        the question, it will decide to retrieve using the retriever tool, or simply end.
-
-        Args:
-            state (messages): The current state
-
-        Returns:
-            dict: The updated state with the agent response appended to messages
-        """
-        print("---CALL AGENT---")
         messages = state["messages"]
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
@@ -66,62 +75,9 @@ class AgenticRAG:
 
         return {"messages": [response]}
 
-    def grade_documents(self, state: MessagesState) -> Command[Literal["generate", "tools"]]:
-        """
-        Determines whether the retrieved documents are relevant to the question.
-
-        Args:
-            state (messages): The current state
-
-        Returns:
-            str: A decision for whether the documents are relevant or not
-        """
-
-        print("---CHECK RELEVANCE---")
-        # LLM with tool and validation
-        llm_with_tool = self.llm.with_structured_output(DocGradeScore, method="json_schema")
-
-        question = state["messages"][0].content
-        docs = state["messages"][-1].content
 
 
-        prompt = DOC_GRADER_PROMPT.format(context=docs, question=question)
-        score = llm_with_tool.invoke(prompt).binary_score
 
-        if score == "yes":
-            print("---DECISION: DOCS RELEVANT---")
-            return Command(goto="generate", update={"messages": docs})
-
-        else:
-            print("---DECISION: DOCS NOT RELEVANT---")
-            print(score)
-            msg = AIMessage(content="", tool_calls=[
-                            {'name': 'web_search_tool', 'args': {'query': question},
-                            'id': '41d01da6-534d-4aae-824c-b4014ec87e10', 'type': 'tool_call'}])
-
-            return Command(goto="tools", update={"messages": msg})
-
-    def edge_condition(self, state: MessagesState):
-
-        last_message = state["messages"][-1]
-        if isinstance(last_message, ToolMessage):
-            last_tool = last_message.name
-        else:
-            raise RuntimeError("edge_conditions: tool call error")
-        if last_tool == "retrieve_research_papers":
-            return "grader"
-        elif last_tool == "web_search_tool":
-            return "generate"
-        else:
-            raise RuntimeError("edge_conditions")
-
-    def generate_answer(self, state: MessagesState):
-        print("---GENERATE---")
-        question = state["messages"][0].content
-        context = state["messages"][-1].content
-        prompt = RAG_PROMPT.format(context=context, question=question)
-        response = self.llm.invoke(prompt)
-        return{"messages": [response]}
 
 
 

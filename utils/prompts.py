@@ -48,3 +48,8 @@ any relevant information. Only generate 3 queries max."""
 RESEARCH_CRITIQUE_PROMPT = """You are a researcher charged with providing information that can \
 be used when making any requested revisions (as outlined below). \
 Generate a list of search queries that will gather any relevant information. Only generate 3 queries max."""
+
+ROUTER_PROMPT = """Determine if the user query requires a simple, advanced or . An 'advanced' request might require \
+multiple steps like retrieving an order ID and looking up shipping information, whereas a 'simple' request can \
+handle more straightforward queries. return either 'simple' or 'advanced'. Do not explain your reasoning Your \
+only task is to determine where to route the user query."""
