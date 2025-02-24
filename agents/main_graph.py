@@ -48,15 +48,15 @@ class AgenticRAG:
 
     def agent(self, state: MessagesState):
         """
-            Invokes the agent model to generate a response based on the current state. Given
-            the question, it will decide to retrieve using the retriever tool, or simply end.
+        Invokes the agent model to generate a response based on the current state. Given
+        the question, it will decide to retrieve using the retriever tool, or simply end.
 
-            Args:
-                state (messages): The current state
+        Args:
+            state (messages): The current state
 
-            Returns:
-                dict: The updated state with the agent response appended to messages
-            """
+        Returns:
+            dict: The updated state with the agent response appended to messages
+        """
         print("---CALL AGENT---")
         messages = state["messages"]
         if self.system:
@@ -68,14 +68,14 @@ class AgenticRAG:
 
     def grade_documents(self, state: MessagesState) -> Command[Literal["generate", "tools"]]:
         """
-            Determines whether the retrieved documents are relevant to the question.
+        Determines whether the retrieved documents are relevant to the question.
 
-            Args:
-                state (messages): The current state
+        Args:
+            state (messages): The current state
 
-            Returns:
-                str: A decision for whether the documents are relevant or not
-            """
+        Returns:
+            str: A decision for whether the documents are relevant or not
+        """
 
         print("---CHECK RELEVANCE---")
         # LLM with tool and validation

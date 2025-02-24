@@ -1,5 +1,3 @@
-# RETRIEVER_TOOL_PROMPT = "Retrieve information related to a query."
-
 RETRIEVER_TOOL_PROMPT = "Use this if you need to search information from research papers on neural network architectures, large language models, and new developments in this area. "
 
 DOC_GRADER_PROMPT = """You are a grader assessing relevance of a retrieved document to a user question. \n 

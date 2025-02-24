@@ -11,7 +11,7 @@ retriever_tool = get_retriever_tool()
 
 tools = [retriever_tool, web_search_tool]
 
-from agents.main_graph import AgenticRAG
+from agents.sub_graph import AgenticRAG
 agent = AgenticRAG(llm, tools).graph
 
 from agents.sub_graph import EssayWriter
