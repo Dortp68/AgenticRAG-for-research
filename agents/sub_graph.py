@@ -41,7 +41,6 @@ class EssayWriter:
             HumanMessage(content=state['task'])
         ]
         response = self.llm.invoke(messages)
-        print(response)
         return {"plan": response.content}
 
     def research_plan_node(self, state: AgentState):
@@ -52,8 +51,12 @@ class EssayWriter:
 
         content = state.get('content') or []
         for q in queries.queries:
-            response = self.retriever.invoke(q)
-            content.append(response)
+            print(q)
+            print("//////////////")
+            response = self.retriever.invoke({"messages": [q]})
+            r = response["messages"][-1].content
+            print(r)
+            content.append(r)
         return {"content": content}
 
     def generation_node(self, state: AgentState):

@@ -120,7 +120,6 @@ class AgenticRAG:
         question = state["messages"][0].content
         context = state["messages"][-1].content
         prompt = RAG_PROMPT.format(context=context, question=question)
-        print(prompt)
         response = self.llm.invoke(prompt)
         return{"messages": [response]}
 
