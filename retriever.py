@@ -37,7 +37,7 @@ class DocumentProcessor:
 
         docs_list = [item for sublist in docs for item in sublist]
         print("---SPLITTING DOCUMENTS---")
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
         doc_splits = text_splitter.split_documents(docs_list)
         return doc_splits
 
