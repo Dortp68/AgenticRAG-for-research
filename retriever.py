@@ -2,6 +2,7 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_unstructured import UnstructuredLoader
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.documents import Document
 from langchain.retrievers import ContextualCompressionRetriever
@@ -56,22 +57,19 @@ class DocumentProcessor:
             list[str]: list pages content.
         """
         async def load_(url: str) -> list[str]:
-
             loader = UnstructuredLoader(web_url=url)
-
             setup_docs = []
             async for doc in loader.alazy_load():
                 if doc.metadata["category"] == "NarrativeText" or doc.metadata["category"] == "ListItem":
                     setup_docs.append(doc.page_content)
-
             return setup_docs
 
         print("---LOADING WEB PAGES---")
         web_content = []
         for url in urls:
             page_setup_docs = asyncio.run(load_(url))
+            print(page_setup_docs)
             web_content.extend(page_setup_docs)
-
         return web_content
 
 

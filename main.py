@@ -16,13 +16,13 @@ agent = AgenticRAG(llm, tools).graph
 
 from agents.sub_graph import EssayWriter
 d = EssayWriter(llm, agent).graph
-response = d.invoke({"task": "How Does the Attention Mechanism Work and Why Is It So Important for LLMs?"})
+response = d.invoke({"task": "Advantages and Limitations of Transformers Compared to RNNs and CNNs"})
 print(response["draft"])
 exit()
 
 query = "Whats the difference between titan architecture and transformers?"
 query1 = "Give me 5 reasons to visit Canada"
-gquery = "Hello"
-response = agent.invoke({"messages": [query]})
+gquery = "How Does the Attention Mechanism Work and Why Is It So Important for LLMs?"
+response = agent.invoke({"messages": [query1]})
 print(response["messages"][-1].content)
 
