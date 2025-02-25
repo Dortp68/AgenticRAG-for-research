@@ -81,10 +81,6 @@ def web_search_tool(query: str) -> str:
     result = "\n".join(docs)
     return result
 
-@tool
-def general_query_tool(query: str) -> str:
-    """Response on general type user`s query"""
-    return query
 
 
 class IndexBuilder:

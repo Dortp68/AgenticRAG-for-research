@@ -3,12 +3,11 @@ from pydantic import BaseModel, Field
 from langgraph.graph import MessagesState, StateGraph, END, START
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import Command
-from langchain_core.messages import (AnyMessage,
-                                     SystemMessage,
+from langchain_core.messages import (SystemMessage,
                                      HumanMessage,
                                      AIMessage,
-                                     ChatMessage,
-                                     ToolMessage)
+                                     ToolMessage,
+                                     filter_messages)
 
 from utils.prompts import (PLAN_PROMPT,
                            WRITER_PROMPT,
@@ -95,7 +94,6 @@ class AgenticRAG:
 
         else:
             print("---DECISION: DOCS NOT RELEVANT---")
-            print(score)
             msg = AIMessage(content="", tool_calls=[
                             {'name': 'web_search_tool', 'args': {'query': question},
                             'id': '41d01da6-534d-4aae-824c-b4014ec87e10', 'type': 'tool_call'}])
@@ -154,6 +152,7 @@ class EssayWriter:
         self.graph = builder.compile()
 
     def plan_node(self, state: AgentState):
+        print("---CALL ESSAY WRITER---")
         messages = [
             SystemMessage(content=PLAN_PROMPT),
             HumanMessage(content=state['task'])
@@ -169,16 +168,13 @@ class EssayWriter:
 
         content = state.get('content') or []
         for q in queries.queries:
-            print("//////////////")
-            print(q)
-            print("//////////////")
             response = self.retriever.invoke({"messages": [q]})
             r = response["messages"][-1].content
-            print(r)
             content.append(r)
         return {"content": content}
 
     def generation_node(self, state: AgentState):
+        print("---GENERATE ESSAY---")
         content = "\n\n".join(state['content'] or [])
         user_message = HumanMessage(
             content=f"{state['task']}\n\nHere is my plan:\n\n{state['plan']}")
@@ -196,20 +192,19 @@ class EssayWriter:
 
 
 class ChatAgent:
-    def __init__(self, llm, system=""):
+    def __init__(self, llm, memory, system="You are helpful assistant"):
         self.llm = llm
         self.system = system
-
         builder = StateGraph(MessagesState)
-
         builder.add_edge(START, "agent")
         builder.add_node("agent", self.call_llm)
         builder.add_edge("agent", END)
-        self.graph = builder.compile()
+        self.graph = builder.compile(checkpointer=memory)
 
     def call_llm(self, state: MessagesState):
         print("---CALL CHAT AGENT---")
         messages = state["messages"]
+        messages = filter_messages(messages, include_types=[HumanMessage, ToolMessage])
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
         response = self.llm.invoke(messages)
