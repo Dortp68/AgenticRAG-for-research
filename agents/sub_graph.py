@@ -204,7 +204,7 @@ class ChatAgent:
     def call_llm(self, state: MessagesState):
         print("---CALL CHAT AGENT---")
         messages = state["messages"]
-        messages = filter_messages(messages, include_types=[HumanMessage, ToolMessage])
+        messages = filter_messages(messages, include_types=[HumanMessage, ToolMessage, AIMessage])
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
         response = self.llm.invoke(messages)

@@ -25,8 +25,14 @@ class DocumentProcessor:
     """
 
     @staticmethod
-    def load_pdf():
-        pass
+    def load_pdf(path) -> list[Document]:
+        try:
+            docs = PyPDFLoader(path).load()
+        except Exception as e:
+            raise RuntimeError(f"Error processing document: {e}")
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
+        doc_splits = text_splitter.split_documents(docs)
+        return doc_splits
 
     @staticmethod
     def load_documents() -> list[Document]:
@@ -152,7 +158,7 @@ def get_retriever_tool():
         RETRIEVER_TOOL_PROMPT,
         response_format = "content_and_artifact"
     )
-    return  retriever_tool
+    return  builder, retriever_tool
 
 
 

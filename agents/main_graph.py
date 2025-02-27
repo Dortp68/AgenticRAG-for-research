@@ -2,7 +2,6 @@ from langgraph.graph import MessagesState
 from langgraph.graph import END, StateGraph, START
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt import tools_condition
-from agents import checkpointer
 from langchain.tools import tool
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage, AIMessage
 from agents.sub_graph import ChatAgent, AgenticRAG, EssayWriter
@@ -41,18 +40,20 @@ from agents.sub_graph import ChatAgent, AgenticRAG, EssayWriter
 #     return agent
 
 
+from langgraph.checkpoint.memory import MemorySaver
 
 class Supervisor:
-    def __init__(self, llm, tools, memory=checkpointer, system=""):
+    def __init__(self, llm, tools, memory, config, system=""):
         print("---COMPILING MAIN GRAPH---")
+
         chat_agent = ChatAgent(llm, memory).graph
         rag_agent = AgenticRAG(llm, tools).graph
         essay_writer_agent = EssayWriter(llm, rag_agent).graph
 
         @tool
         def chat_agent_tool(query: str) -> str:
-            """Answer on general user query"""
-            response = chat_agent.invoke({"messages": [query]})
+            """Answer on general user query. If you call this tool do NOT change user query, pass the whole query"""
+            response = chat_agent.invoke({"messages": [query]}, config)
             return response['messages'][-1].content
 
         @tool
