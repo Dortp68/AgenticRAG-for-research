@@ -16,6 +16,7 @@ from utils.prompts import (PLAN_PROMPT,
                            DOC_GRADER_PROMPT,
                            RAG_PROMPT)
 
+from utils import config
 
 class DocGradeScore(BaseModel):
     """Binary score that expresses the relevance of the document to the user's question"""
@@ -72,12 +73,10 @@ class AgenticRAG:
         print("---CALL RAG AGENT---")
         messages = state["messages"]
         question = messages[0].content
-        print(question)
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
         model = self.llm.bind_tools(self.tools)
         response = model.invoke(messages)
-        print(response)
         return {"messages": [response], "question": question}
 
     def grade_documents(self, state: RagState) -> Command[Literal["generate", "tools"]]:
@@ -128,8 +127,6 @@ class AgenticRAG:
 
     def generate_answer(self, state: RagState):
         print("---GENERATE---")
-        for i in state["messages"]:
-            print(i)
         question = state["question"]
         context = state["messages"][-1].content
         prompt = RAG_PROMPT.format(context=context, question=question)
@@ -140,13 +137,17 @@ class AgenticRAG:
             return Command(update={"messages": [response], "context": context}, goto="hallucinations")
 
     def check_hallucinations(self, state: RagState):
+
+        if config.hallucinations == False:
+            return Command(goto=END)
+
         print("---CHECK HALLUCINATIONS---")
         system_prompt = CHECK_HALLUCINATIONS.format(
             documents=state["context"],
+            query=state["question"],
             generation=state["messages"][-1]
         )
         response = self.llm.with_structured_output(GradeHallucinations, method="json_schema").invoke(system_prompt)
-        print(response)
         response = response.binary_score
         if response == "yes":
             print("---NO HALLUCINATIONS---")
@@ -246,5 +247,4 @@ class ChatAgent:
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
         response = self.llm.invoke(messages)
-        print(response.content)
         return {"messages": [response]}

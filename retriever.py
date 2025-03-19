@@ -2,35 +2,32 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_unstructured import UnstructuredLoader
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.documents import Document
-from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers import ContextualCompressionRetriever, EnsembleRetriever
+from langchain_community.retrievers import BM25Retriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.tools.retriever import create_retriever_tool
 from langchain.tools import tool
 
 import asyncio
 import os
 
 from utils import config
-from utils.prompts import RETRIEVER_TOOL_PROMPT
-from utils.utils import web_search_text
+from utils.websearch import web_search_text
 
 
 class DocumentProcessor:
     """
     Handles document loading and splitting.
     """
-
     @staticmethod
     def load_pdf(path) -> list[Document]:
         try:
             docs = PyPDFLoader(path).load()
         except Exception as e:
             raise RuntimeError(f"Error processing document: {e}")
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
         doc_splits = text_splitter.split_documents(docs)
         return doc_splits
 
@@ -50,7 +47,7 @@ class DocumentProcessor:
 
         docs_list = [item for sublist in docs for item in sublist]
         print("---SPLITTING DOCUMENTS---")
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=300)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
         doc_splits = text_splitter.split_documents(docs_list)
         return doc_splits
 
@@ -74,8 +71,8 @@ class DocumentProcessor:
         web_content = []
         for url in urls:
             page_setup_docs = asyncio.run(load_(url))
-            print(page_setup_docs)
             web_content.extend(page_setup_docs)
+            if len(web_content) == 3: break
         return web_content
 
 
@@ -119,46 +116,40 @@ class IndexBuilder:
 
     def build_retriever(self):
         """
-        Builds vector-based retrievers default or with reranking.
+        Builds BM25 and vector-based retrievers and combines them into an ensemble retriever, default or with reranking.
 
         Returns:
             ContextualCompressionRetriever: retriever with reranking.
         """
         try:
+            print("---BUILDING BM25 RETRIEVER---")
+            ids = self.vectorstore.get()["ids"]
+            bm25_retriever = BM25Retriever.from_documents(self.vectorstore.get_by_ids(ids), search_kwargs={"k": 10})
+
+        except Exception as e:
+            raise RuntimeError(f"Error building BM25 retriever: {e}")
+
+        try:
+            print("---BUILDING MMR RETRIEVER---")
+            mmr_retriever = self.vectorstore.as_retriever(search_type="mmr", k=10)
+            print("---BUILDING SIMILARITY RETRIEVER---")
+            sim_retriever = self.vectorstore.as_retriever(search_type="similarity", k=10)
+            print("---COMBINING RETRIEVERS---")
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[sim_retriever, mmr_retriever, bm25_retriever],
+                weights=[0.3, 0.3, 0.4],
+            )
             if config.reranking:
                 print("---BUILDING RETRIEVER WITH RERANKING---")
-                base_retriever = self.vectorstore.as_retriever(k=10)
                 model = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
                 compressor = CrossEncoderReranker(model=model, top_n=config.top_k)
-                retriever = ContextualCompressionRetriever(
-                    base_compressor=compressor, base_retriever=base_retriever
+                ensemble_retriever = ContextualCompressionRetriever(
+                    base_compressor=compressor, base_retriever=ensemble_retriever
                 )
-            else:
-                print("---BUILDING DEFAULT RETRIEVER---")
-                retriever = self.vectorstore.as_retriever(k=config.top_k)
         except Exception as e:
             raise RuntimeError(f"Error pulling documents: {e}")
 
-        return retriever
-
-def get_retriever_tool():
-
-    builder = IndexBuilder()
-    builder.build_vectorstore()
-
-    if len(builder.vectorstore.get()["ids"]) == 0:
-        docs_list = DocumentProcessor.load_documents()
-        builder.pull_documents(docs_list)
-
-    retriever = builder.build_retriever()
-
-    retriever_tool = create_retriever_tool(
-        retriever,
-        "retrieve_research_papers",
-        RETRIEVER_TOOL_PROMPT,
-        response_format = "content_and_artifact"
-    )
-    return  builder, retriever_tool
+        return ensemble_retriever
 
 
 
