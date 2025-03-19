@@ -15,7 +15,7 @@ with gr.Blocks() as demo:
                         rag_top_k_retrieval = gr.Slider(
                             minimum=1, maximum=7, value=5, step=1, interactive=True, label="Top K:", info="Number of retrieved chunks for RAG")
                         rag_options = gr.CheckboxGroup(choices=["reranking", "check hallucinations"],
-                                                           value=["reranking", "check hallucinations"],
+                                                           value=["reranking"],
                                                            label="Choose Options")
                         rag_refresh = gr.Button(value="Refresh retriever")
                     input_audio_block = gr.Audio(

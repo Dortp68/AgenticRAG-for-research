@@ -91,6 +91,7 @@ class IndexBuilder:
     def __init__(self):
         self.vectorstore = None
         self.embeddings = OllamaEmbeddings(model=config.embedding_model)
+        self.model = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
 
     def build_vectorstore(self):
         """
@@ -141,8 +142,7 @@ class IndexBuilder:
             )
             if config.reranking:
                 print("---BUILDING RETRIEVER WITH RERANKING---")
-                model = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-                compressor = CrossEncoderReranker(model=model, top_n=config.top_k)
+                compressor = CrossEncoderReranker(model=self.model, top_n=config.top_k)
                 ensemble_retriever = ContextualCompressionRetriever(
                     base_compressor=compressor, base_retriever=ensemble_retriever
                 )
