@@ -39,6 +39,7 @@ import gradio as gr
 
 def respond(chatbot: list, user_input, input_audio_block=None):
     message = user_input['text']
+    print(message)
     response = agent.invoke({"messages": [message]}, config)
     chatbot.append((message, response['messages'][-1].content))
     yield chatbot, gr.MultimodalTextbox(value=None, interactive=False, file_types=["image"]), ""

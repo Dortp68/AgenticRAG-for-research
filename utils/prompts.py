@@ -24,6 +24,24 @@ Adjust your response length based on the question, but use five sentences maximu
 
 Answer:"""
 
+CHECK_HALLUCINATIONS = """You are a grader assessing whether an LLM generation is supported by a set of retrieved facts. 
+
+Give a binary score between 'yes' or 'no', where 'yes' means that the answer is supported by the set of facts.
+
+<Set of facts>
+{documents}
+<Set of facts/>
+
+
+<LLM generation> 
+{generation}
+<LLM generation/> 
+
+
+If the set of facts is not provided, give the score 'yes'.
+
+"""
+
 PLAN_PROMPT = """You are an expert writer tasked with writing a high level outline of an essay. \
 Write such an outline for the user provided topic. Give an outline of the essay along with any relevant notes \
 or instructions for the sections."""

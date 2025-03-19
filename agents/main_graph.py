@@ -6,41 +6,10 @@ from langchain.tools import tool
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage, AIMessage
 from agents.sub_graph import ChatAgent, AgenticRAG, EssayWriter
 
+from pydantic import BaseModel
+class ToolInput(BaseModel):
+    query: str
 
-# def create_supervisor(llm, tools):
-#     chat_agent = ChatAgent(llm).graph
-#     rag_agent = AgenticRAG(llm, tools).graph
-#     essay_writer_agent = EssayWriter(llm, rag_agent).graph
-#
-#     @tool
-#     def chat_agent_tool(query: str):
-#         """Answer on general user query"""
-#         response = chat_agent.invoke({"messages": [query]})
-#         return response['messages'][-1]
-#
-#     @tool
-#     def rag_agent_tool(query: str):
-#         """Performs websearch and search information in vectorstore from research papers on neural network architectures, large language models, and new developments in this area."""
-#         response = rag_agent.invoke({"messages": [query]})
-#         return response['messages'][-1]
-#
-#     @tool
-#     def essay_writer_tool(query: str):
-#         """This tool writes a detailed answer to a question or essay on a user-defined topic"""
-#         response = essay_writer_agent.invoke({"task": query})
-#         return response["draft"]
-#
-#     agent = create_react_agent(
-#         model=llm,
-#         tools=[chat_agent_tool, rag_agent_tool, essay_writer_tool]
-#         # prompt="You are a team supervisor managing a research expert and a math expert. "
-#         # "For current events, use research_agent. "
-#         # "For math problems, use math_agent."
-#     )
-#     return agent
-
-
-from langgraph.checkpoint.memory import MemorySaver
 
 class Supervisor:
     def __init__(self, llm, tools, memory, config, system=""):
@@ -50,21 +19,24 @@ class Supervisor:
         rag_agent = AgenticRAG(llm, tools).graph
         essay_writer_agent = EssayWriter(llm, rag_agent).graph
 
-        @tool
+        @tool(args_schema=ToolInput)
         def chat_agent_tool(query: str) -> str:
             """Answer on general user query. If you call this tool do NOT change user query, pass the whole query"""
+            print(query)
             response = chat_agent.invoke({"messages": [query]}, config)
             return response['messages'][-1].content
 
-        @tool
+        @tool(args_schema=ToolInput)
         def rag_agent_tool(query: str) -> str:
             """Performs websearch and search information in vectorstore from research papers on neural network architectures, large language models, and new developments in this area."""
+            print(query)
             response = rag_agent.invoke({"messages": [query]})
             return response['messages'][-1].content
 
-        @tool
+        @tool(args_schema=ToolInput)
         def essay_writer_tool(query: str) -> str:
             """This tool writes a detailed answer to a question or essay on a user-defined topic"""
+            print(query)
             response = essay_writer_agent.invoke({"task": query})
             return response["draft"]
 
@@ -106,9 +78,8 @@ class Supervisor:
             messages = [SystemMessage(content=self.system)] + messages
         model = self.llm.bind_tools(self.tools)
         response = model.invoke(messages)
+        print(response)
         return {"messages": [response]}
-
-
 
 
 

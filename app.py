@@ -18,6 +18,7 @@ with gr.Blocks() as demo:
                             value="Similarity search",
                             interactive=True
                         )
+                        rag_refresh = gr.Button(value="Refresh retriever")
                     input_audio_block = gr.Audio(
                         sources=["microphone"],
                         label="Submit your query using voice",

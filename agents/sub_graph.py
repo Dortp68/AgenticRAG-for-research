@@ -11,9 +11,8 @@ from langchain_core.messages import (SystemMessage,
 
 from utils.prompts import (PLAN_PROMPT,
                            WRITER_PROMPT,
-                           REFLECTION_PROMPT,
+                           CHECK_HALLUCINATIONS,
                            RESEARCH_PLAN_PROMPT,
-                           RESEARCH_CRITIQUE_PROMPT,
                            DOC_GRADER_PROMPT,
                            RAG_PROMPT)
 
@@ -22,6 +21,17 @@ class DocGradeScore(BaseModel):
     """Binary score that expresses the relevance of the document to the user's question"""
     binary_score: str = Field(None, description="Relevance score 'yes' or 'no'")
 
+class GradeHallucinations(BaseModel):
+    """Binary score for hallucination present in generation answer."""
+
+    binary_score: str = Field(
+        description="Answer is grounded in the facts, 'yes' or 'no'"
+    )
+
+class RagState(MessagesState):
+    question: str
+    context: str
+    last_tool: str
 
 class AgenticRAG:
     def __init__(self, llm, tools, memory=None, system=""):
@@ -29,11 +39,14 @@ class AgenticRAG:
         self.system = system
         self.tools = tools
 
-        builder = StateGraph(MessagesState)
+        builder = StateGraph(RagState)
         builder.add_node("agent", self.agent)
         builder.add_node("tools", ToolNode(tools))
         builder.add_node("generate", self.generate_answer)
         builder.add_node("grader", self.grade_documents)
+        builder.add_node("tool_condition", self.edge_condition)
+        builder.add_node("hallucinations", self.check_hallucinations)
+
 
         builder.add_edge(START, "agent")
         builder.add_conditional_edges(
@@ -42,11 +55,10 @@ class AgenticRAG:
             tools_condition,
             ["tools", END],
         )
-        builder.add_conditional_edges("tools", self.edge_condition)
-        builder.add_edge("generate", END)
+        builder.add_edge("tools", "tool_condition")
         self.graph = builder.compile()
 
-    def agent(self, state: MessagesState):
+    def agent(self, state: RagState):
         """
         Invokes the agent model to generate a response based on the current state. Given
         the question, it will decide to retrieve using the retriever tool, or simply end.
@@ -59,14 +71,16 @@ class AgenticRAG:
         """
         print("---CALL RAG AGENT---")
         messages = state["messages"]
+        question = messages[0].content
+        print(question)
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
         model = self.llm.bind_tools(self.tools)
         response = model.invoke(messages)
+        print(response)
+        return {"messages": [response], "question": question}
 
-        return {"messages": [response]}
-
-    def grade_documents(self, state: MessagesState) -> Command[Literal["generate", "tools"]]:
+    def grade_documents(self, state: RagState) -> Command[Literal["generate", "tools"]]:
         """
         Determines whether the retrieved documents are relevant to the question.
 
@@ -81,9 +95,8 @@ class AgenticRAG:
         # LLM with tool and validation
         llm_with_tool = self.llm.with_structured_output(DocGradeScore, method="json_schema")
 
-        question = state["messages"][0].content
+        question = state["question"]
         docs = state["messages"][-1].content
-
 
         prompt = DOC_GRADER_PROMPT.format(context=docs, question=question)
         score = llm_with_tool.invoke(prompt).binary_score
@@ -100,27 +113,52 @@ class AgenticRAG:
 
             return Command(goto="tools", update={"messages": msg})
 
-    def edge_condition(self, state: MessagesState):
-
+    def edge_condition(self, state: RagState):
         last_message = state["messages"][-1]
         if isinstance(last_message, ToolMessage):
             last_tool = last_message.name
         else:
             raise RuntimeError("edge_conditions: tool call error")
         if last_tool == "retrieve_research_papers":
-            return "grader"
+            return Command(update={"last_tool": last_tool}, goto="grader")
         elif last_tool == "web_search_tool":
-            return "generate"
+            return Command(update={"last_tool": last_tool}, goto="generate")
         else:
             raise RuntimeError("edge_conditions")
 
-    def generate_answer(self, state: MessagesState):
+    def generate_answer(self, state: RagState):
         print("---GENERATE---")
-        question = state["messages"][0].content
+        for i in state["messages"]:
+            print(i)
+        question = state["question"]
         context = state["messages"][-1].content
         prompt = RAG_PROMPT.format(context=context, question=question)
         response = self.llm.invoke(prompt)
-        return{"messages": [response]}
+        if state["last_tool"] == "web_search_tool":
+            return Command(update={"messages": [response]}, goto=END)
+        else:
+            return Command(update={"messages": [response], "context": context}, goto="hallucinations")
+
+    def check_hallucinations(self, state: RagState):
+        print("---CHECK HALLUCINATIONS---")
+        system_prompt = CHECK_HALLUCINATIONS.format(
+            documents=state["context"],
+            generation=state["messages"][-1]
+        )
+        response = self.llm.with_structured_output(GradeHallucinations, method="json_schema").invoke(system_prompt)
+        print(response)
+        response = response.binary_score
+        if response == "yes":
+            print("---NO HALLUCINATIONS---")
+            return Command(goto=END)
+        else:
+            print("---HALLUCINATIONS TRUE---")
+            print(state["question"])
+            msg = AIMessage(content="", tool_calls=[
+                {'name': 'web_search_tool', 'args': {'query': state["question"]},
+                 'id': '41d01da6-534d-4aae-824c-b4014ec87333', 'type': 'tool_call'}])
+
+            return Command(goto="tools", update={"messages": msg})
 
 
 class AgentState(TypedDict):
@@ -208,4 +246,5 @@ class ChatAgent:
         if self.system:
             messages = [SystemMessage(content=self.system)] + messages
         response = self.llm.invoke(messages)
+        print(response.content)
         return {"messages": [response]}
