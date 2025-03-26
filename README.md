@@ -45,7 +45,7 @@ I use Chromadb as a vector repository, data for which is parsed from pdf files. 
 ![](https://github.com/Dortp68/AgenticRAG-for-research/blob/main/imgs/Screenshot%20from%202025-03-26%2008-25-08.png)![](https://github.com/Dortp68/AgenticRAG-for-research/blob/main/imgs/Screenshot%20from%202025-03-26%2008-27-39.png)
 
 I used gradio to build the UI of application. You can:
-+ download PDFs
++ upload PDFs
 + change top_k param
 + enable/disable reranking
 + enable/disable hallucination check
