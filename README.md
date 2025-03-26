@@ -1,4 +1,23 @@
-# AgenticRAG-for-research
+# MultiAgenticRAG-for-research
+
+## Getting Started
+To get started with this project, follow these steps:
+
+1) clone the repository to your local machine:
+```
+git clone https://github.com/Dortp68/AgenticRAG-for-research
+```
+2) Go to the directory and install the dependencies
+```
+pip install -r requirements.txt
+```
+3) Run application
+```
+python3 -m app
+```
+
+
+
 
 
 What are the advantages of the Titans architecture?
